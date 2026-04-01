@@ -7,6 +7,7 @@ class UserManager:
     def get_or_create_user(telegram_id, username=None, full_name=None):
         session = get_session()
         user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        created = False
         if not user:
             user = User(
                 telegram_id=telegram_id,
@@ -16,7 +17,8 @@ class UserManager:
             session.add(user)
             session.commit()
             session.refresh(user)
-        return user
+            created = True
+        return user, created
 
     @staticmethod
     def add_xp(telegram_id, amount):
@@ -42,12 +44,13 @@ class UserManager:
         session = get_session()
         user = session.query(User).filter_by(telegram_id=telegram_id).first()
         if user:
-            total_quizzes = session.query(QuizResult).filter_by(user_id=user.id).count()
-            avg_score = session.query(QuizResult.score).filter_by(user_id=user.id).all()
+            results = session.query(QuizResult).filter_by(user_id=user.id).all()
+            total_quizzes = len(results)
+            avg_score = sum([r.score for r in results]) / total_quizzes if total_quizzes > 0 else 0
             return {
                 "xp": user.xp,
                 "level": user.level,
                 "total_quizzes": total_quizzes,
-                "avg_score": sum([s[0] for s in avg_score]) / len(avg_score) if avg_score else 0
+                "avg_score": avg_score
             }
         return None
