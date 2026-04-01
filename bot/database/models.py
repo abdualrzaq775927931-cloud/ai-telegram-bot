@@ -14,6 +14,8 @@ class User(Base):
     xp = Column(Integer, default=0)
     level = Column(Integer, default=1)
     is_admin = Column(Boolean, default=False)
+    # الميزة الجديدة: تم إضافة خاصية الحظر هنا
+    is_banned = Column(Boolean, default=False) 
     created_at = Column(DateTime, default=datetime.utcnow)
     
     polls = relationship("Poll", back_populates="creator")
@@ -26,7 +28,7 @@ class Poll(Base):
     id = Column(Integer, primary_key=True)
     creator_id = Column(Integer, ForeignKey('users.id'))
     question = Column(String)
-    options = Column(JSON)  # List of options
+    options = Column(JSON)  # قائمة الخيارات
     is_anonymous = Column(Boolean, default=True)
     is_closed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -40,7 +42,8 @@ class Quiz(Base):
     creator_id = Column(Integer, ForeignKey('users.id'))
     title = Column(String)
     description = Column(String, nullable=True)
-    questions = Column(JSON)  # List of dicts: {question, options, correct_index, explanation}
+    # هيكل الأسئلة: {question, options, correct_index, explanation}
+    questions = Column(JSON)  
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -70,3 +73,4 @@ class Response(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship("User", back_populates="responses")
+    
