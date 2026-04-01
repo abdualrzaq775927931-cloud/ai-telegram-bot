@@ -64,3 +64,20 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer()
     await query.edit_message_text(leaderboard_text, parse_mode="Markdown")
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """عرض قائمة المساعدة"""
+    help_text = (
+        "📖 *دليل أوامر البوت:*\n\n"
+        "➕ /add_quiz - إنشاء اختبار جديد (العنوان;السؤال;الصح;...)\n"
+        "📋 /my_quizzes - عرض اختباراتك التي أنشأتها\n"
+        "👤 /profile - عرض ملفك الشخصي ونقاطك\n"
+        "🏆 /leaderboard - عرض قائمة المتصدرين\n"
+        "🚫 /ban - (للمالك فقط) حظر مستخدم\n"
+    )
+    # التحقق إذا كان الطلب من رسالة أو من ضغطة زر
+    if update.message:
+        await update.message.reply_text(help_text, parse_mode="Markdown")
+    elif update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(help_text, parse_mode="Markdown")
+        
