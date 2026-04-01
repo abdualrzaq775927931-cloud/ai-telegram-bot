@@ -94,3 +94,18 @@ async def perform_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
     return ConversationHandler.END # تم التغيير هنا أيضاً
     
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """حظر مستخدم عبر الـ ID"""
+    if not is_admin(update.effective_user.id): return
+    if not context.args:
+        await update.message.reply_text("استخدم: /ban [user_id]")
+        return
+    
+    session = get_session()
+    user = session.query(User).filter_by(telegram_id=int(context.args[0])).first()
+    if user:
+        user.is_banned = True
+        session.commit()
+        await update.message.reply_text(f"🚫 تم حظر المستخدم {user.telegram_id}")
+    else:
+        await update.message.reply_text("❌ المستخدم غير موجود.")
