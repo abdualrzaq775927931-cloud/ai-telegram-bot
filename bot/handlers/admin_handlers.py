@@ -174,3 +174,30 @@ async def ban_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await update.message.reply_text("خطأ في معرف المستخدم.")
         
+async def make_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """أمر تعيين مستخدم كمشرف: /makeadmin ID_المستخدم"""
+    user_id = update.effective_user.id
+    if not is_super_admin(user_id):
+        await update.message.reply_text("هذا الأمر متاح للمالك الأساسي فقط. 👑")
+        return
+    
+    if not context.args:
+        await update.message.reply_text("يرجى تزويد معرف المستخدم: `/makeadmin 12345678`")
+        return
+    
+    try:
+        target_id = int(context.args[0])
+        session = get_session()
+        user = session.query(User).filter(User.telegram_id == target_id).first()
+        if not user:
+            await update.message.reply_text("المستخدم غير موجود في قاعدة البيانات.")
+            return
+        
+        user.is_admin = True
+        session.commit()
+        session.close()
+        await update.message.reply_text(f"✅ تم تعيين {user.full_name} كمشرف بنجاح!")
+        await log_event(context, f"🎖️ تم تعيين مشرف جديد: {target_id}")
+    except ValueError:
+        await update.message.reply_text("معرف المستخدم غير صحيح.")
+        
