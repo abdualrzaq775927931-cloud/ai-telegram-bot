@@ -1,80 +1,88 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes
-from ..database.user_manager import UserManager
+from ..database.db_manager import get_session
+from ..database.models import User, Quiz, GroupConfig
+# تأكد من أن UserManager مستورد بشكل صحيح إذا كنت تستخدمه، 
+# أو استخدم Session مباشرة كما في الكود أدناه لضمان التوافق مع بقية ملفاتك
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the /start command."""
-    user = update.effective_user
-    UserManager.get_or_create_user(
-        telegram_id=user.id,
-        username=user.username,
-        full_name=user.full_name
-    )
+    """الترحيب بالمستخدم وعرض قائمة التعليمات والأزرار الرئيسية"""
+    user_info = update.effective_user
     
-    keyboard = [
-        [
-            InlineKeyboardButton("📊 إنشاء استطلاع", callback_data="create_poll"),
-            InlineKeyboardButton("📝 إنشاء اختبار", callback_data="create_quiz")
-        ],
-        [
-            InlineKeyboardButton("🏆 لوحة الصدارة", callback_data="leaderboard"),
-            InlineKeyboardButton("👤 ملفي الشخصي", callback_data="profile")
-        ],
-        [
-            InlineKeyboardButton("❓ مساعدة", callback_data="help")
-        ]
+    # 1. تسجيل أو تحديث بيانات المستخدم في قاعدة البيانات
+    session = get_session()
+    try:
+        user = session.query(User).filter_by(telegram_id=user_info.id).first()
+        if not user:
+            user = User(
+                telegram_id=user_info.id,
+                username=user_info.username,
+                full_name=user_info.full_name,
+                xp=0,
+                level=1
+            )
+            session.add(user)
+            session.commit()
+    finally:
+        session.close()
+
+    # 2. إنشاء "أزرار الكيبورد" (Reply Keyboard) التي تظهر أسفل الشاشة (مثل صورك)
+    main_keyboard = [
+        [KeyboardButton("📋 اختباراتي"), KeyboardButton("👤 ملفي الشخصي")],
+        [KeyboardButton("📢 ربط قناة"), KeyboardButton("🚀 نشر فوري")],
+        [KeyboardButton("مساعدة ❓")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
+    reply_markup = ReplyKeyboardMarkup(main_keyboard, resize_keyboard=True)
+
+    # 3. نص الترحيب والتعليمات (يظهر فوراً عند /start)
     welcome_text = (
-        f"مرحباً بك {user.full_name} في بوت استطلاعات الرأي والاختبارات المتطور! 🚀\n\n"
-        "يمكنك من خلال هذا البوت إنشاء استطلاعات رأي تفاعلية واختبارات تعليمية ومشاركتها في القنوات والمجموعات.\n\n"
-        "استخدم الأزرار أدناه للبدء:"
+        f"أهلاً بك يا *{user_info.full_name}* في بوت الاختبارات المتطور! ✨\n\n"
+        f"📖 *دليل الأوامر السريع:*\n"
+        f"➕ `/addquiz` - لإضافة اختبار (العنوان;السؤال;الصح;...)\n"
+        f"📢 `/linkchannel` - لربط قناتك أو مجموعتك بالبوت\n"
+        f"🚀 `/postnow` - لنشر سؤال عشوائي في قناتك فوراً\n"
+        f"🏆 `/leaderboard` - عرض قائمة المتصدرين\n\n"
+        f"💡 يمكنك استخدام الأزرار في الأسفل للوصول السريع للخدمات."
     )
-    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
+
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode="Markdown")
 
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show user profile and stats."""
-    query = update.callback_query
-    user_id = query.from_user.id
-    stats = UserManager.get_user_stats(user_id)
-    
-    if stats:
-        profile_text = (
-            f"👤 *ملفك الشخصي:*\n\n"
-            f"✨ المستوى: {stats['level']}\n"
-            f"⭐ نقاط الخبرة (XP): {stats['xp']}\n"
-            f"📝 الاختبارات المكتملة: {stats['total_quizzes']}\n"
-            f"🎯 متوسط النتيجة: {stats['avg_score']:.1f}%\n"
-        )
-        await query.answer()
-        await query.edit_message_text(profile_text, parse_mode="Markdown")
-    else:
-        await query.answer("لم يتم العثور على بياناتك بعد.")
+    """عرض ملف المستخدم وإحصائياته"""
+    user_id = update.effective_user.id
+    session = get_session()
+    try:
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if user:
+            profile_text = (
+                f"👤 *ملفك الشخصي:*\n\n"
+                f"✨ المستوى: `{user.level}`\n"
+                f"⭐ نقاط الخبرة: `{user.xp} XP`\n"
+                f"📊 الاختبارات المكتملة: `0`\n" # يمكنك تحديثها لاحقاً
+            )
+            # التحقق إذا كان الاستدعاء من رسالة نصية أو زر
+            if update.message:
+                await update.message.reply_text(profile_text, parse_mode="Markdown")
+            else:
+                await update.callback_query.answer()
+                await update.callback_query.edit_message_text(profile_text, parse_mode="Markdown")
+        else:
+            msg = "لم يتم العثور على بياناتك، أرسل /start أولاً."
+            if update.message: await update.message.reply_text(msg)
+    finally:
+        session.close()
 
-async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show top users."""
-    query = update.callback_query
-    top_users = UserManager.get_leaderboard(10)
-    
-    leaderboard_text = "🏆 *لوحة الصدارة (أعلى 10 مستخدمين):*\n\n"
-    for i, user in enumerate(top_users, 1):
-        medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-        leaderboard_text += f"{medal} {user.full_name} - {user.xp} XP (Lvl {user.level})\n"
-    
-    await query.answer()
-    await query.edit_message_text(leaderboard_text, parse_mode="Markdown")
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """عرض قائمة المساعدة"""
+    """عرض قائمة المساعدة التفصيلية"""
     help_text = (
-        "📖 *دليل أوامر البوت:*\n\n"
-        "➕ /add_quiz - إنشاء اختبار جديد (العنوان;السؤال;الصح;...)\n"
-        "📋 /my_quizzes - عرض اختباراتك التي أنشأتها\n"
-        "👤 /profile - عرض ملفك الشخصي ونقاطك\n"
-        "🏆 /leaderboard - عرض قائمة المتصدرين\n"
-        "🚫 /ban - (للمالك فقط) حظر مستخدم\n"
+        "📖 *دليل استخدام البوت:*\n\n"
+        "🔹 *إضافة اختبار:* أرسل `/addquiz` متبوعاً بالبيانات هكذا:\n"
+        "`العنوان;السؤال;الخيار الصح;خطأ1;خطأ2`\n\n"
+        "🔹 *ربط القنوات:* أرسل `/linkchannel` ثم ID القناة.\n"
+        "💡 تأكد من إضافة البوت كمشرف في القناة أولاً.\n\n"
+        "🔹 *إدارة الاختبارات:* استخدم `/myquizzes` لحذف أو تعديل أسئلتك."
     )
-    # التحقق إذا كان الطلب من رسالة أو من ضغطة زر
+    
     if update.message:
         await update.message.reply_text(help_text, parse_mode="Markdown")
     elif update.callback_query:
