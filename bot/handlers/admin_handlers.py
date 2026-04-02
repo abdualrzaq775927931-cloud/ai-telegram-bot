@@ -1,5 +1,5 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 from ..config.settings import ADMIN_IDS, LOG_CHANNEL
 from ..database.db_manager import get_session
 from ..database.models import User, Poll, Quiz, Channel, BotSettings
@@ -7,7 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# حالات الحوار (States) - تأكد من مطابقتها لما في main.py
+# حالات الحوار (States) - يجب أن تطابق المستخدم في main.py
 BROADCAST_MESSAGE = "BROADCAST_MESSAGE"
 SET_FORCE_SUB = "SET_FORCE_SUB"
 
@@ -54,8 +54,10 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🔒 ضبط الاشتراك الإجباري", callback_data="admin_set_sub"),
             InlineKeyboardButton("🚫 حظر مستخدم", callback_data="admin_ban_user")
         ],
-        [InlineKeyboardButton("🎖️ تعيين مشرف", callback_data="admin_make_admin")],
-        [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="start")]
+        [
+            InlineKeyboardButton("🎖️ تعيين مشرف", callback_data="admin_make_admin"),
+            InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="start")
+        ]
     ]
     
     text = "🛠 *لوحة تحكم المالك:*\n\nمرحباً بك. يمكنك الآن التحكم في إعدادات البوت والاشتراك الإجباري من هنا."
@@ -92,7 +94,7 @@ async def save_force_sub(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = "✅ تم إلغاء نظام الاشتراك الإجباري بنجاح."
     else:
         if not val.startswith('@'):
-            await update.message.reply_text("❌ خطأ: يوزر القناة يجب أن يبدأ بـ @")
+            await update.message.reply_text("❌ خطأ: يوزر القناة يجب أن يبدأ بـ @. حاول مرة أخرى:")
             session.close()
             return SET_FORCE_SUB
         setting.value = val
@@ -104,7 +106,7 @@ async def save_force_sub(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await log_event(context, f"⚙️ قام الأدمن بتحديث الاشتراك الإجباري إلى: {val}")
     return ConversationHandler.END
 
-# --- 2. نظام الإحصائيات ---
+# --- 2. نظام الإحصائيات الشامل ---
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -112,6 +114,7 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     u_count = session.query(User).count()
     q_count = session.query(Quiz).count()
+    c_count = session.query(Channel).count() # عدد القنوات المربوطة للنشر
     b_count = session.query(User).filter_by(is_banned=True).count()
     sub_setting = session.query(BotSettings).filter_by(key='force_sub_channel').first()
     sub_channel = sub_setting.value if sub_setting and sub_setting.value else "❌ غير مفعل"
@@ -119,21 +122,22 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session.close()
     
     stats_text = (
-        "📊 *إحصائيات البوت الحالية:*\n\n"
+        "📊 *إحصائيات الإدارة كاملة:*\n\n"
         f"👥 إجمالي المستخدمين: `{u_count}`\n"
         f"📝 إجمالي الاختبارات: `{q_count}`\n"
+        f"📢 قنوات النشر المربوطة: `{c_count}`\n"
         f"🚫 عدد المحظورين: `{b_count}`\n"
-        f"📢 قناة الاشتراك الحالية: `{sub_channel}`"
+        f"🔗 قناة الاشتراك الإجباري: `{sub_channel}`"
     )
     
-    keyboard = [[InlineKeyboardButton("🔙 رجوع", callback_data="admin_panel")]]
+    keyboard = [[InlineKeyboardButton("🔙 رجوع للوحة", callback_data="admin_panel")]]
     await query.edit_message_text(stats_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 # --- 3. نظام الإذاعة (Broadcast) ---
 async def start_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("📢 أرسل الآن الرسالة (نص فقط) التي تريد بثها للجميع:")
+    await query.edit_message_text("📢 أرسل الآن الرسالة التي تريد بثها لجميع المستخدمين:")
     return BROADCAST_MESSAGE
 
 async def perform_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -143,7 +147,7 @@ async def perform_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     session.close()
     
     success, fail = 0, 0
-    sent_msg = await update.message.reply_text("⏳ جاري الإرسال، يرجى الانتظار...")
+    sent_msg = await update.message.reply_text("⏳ جاري الإرسال لجميع المستخدمين...")
     
     for user in users:
         try:
@@ -158,10 +162,9 @@ async def perform_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- 4. أوامر الحظر وتعيين المشرفين ---
 async def ban_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """أمر الحظر النصي: /ban ID"""
     if not await check_admin(update.effective_user.id): return
     if not context.args:
-        await update.message.reply_text("❌ أرسل المعرف: `/ban 1234567`", parse_mode="Markdown")
+        await update.message.reply_text("❌ أرسل المعرف هكذا: `/ban 1234567`")
         return
     
     try:
@@ -171,28 +174,36 @@ async def ban_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user:
             user.is_banned = True
             session.commit()
-            await update.message.reply_text(f"🚫 تم حظر {user.full_name} بنجاح.")
+            await update.message.reply_text(f"🚫 تم حظر المستخدم {user.full_name} بنجاح.")
+            await log_event(context, f"🚫 حظر مستخدم: {target_id}")
         else:
-            await update.message.reply_text("المستخدم غير موجود.")
+            await update.message.reply_text("❌ المستخدم غير موجود في قاعدة البيانات.")
         session.close()
-    except:
-        await update.message.reply_text("خطأ في المعرف.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ حدث خطأ: {e}")
 
 async def admin_ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """زر الحظر في لوحة التحكم"""
-    await update.callback_query.answer("⚠️ استخدم الأمر النصي: /ban ثم الأيدي الخاص بالمستخدم", show_alert=True)
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "🚫 *إدارة الحظر:*\n\nلحظر مستخدم، أرسل الأمر التالي في المحادثة:\n`/ban ID_المستخدم`",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data="admin_panel")]])
+    )
 
 async def admin_make_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """زر تعيين مشرف في لوحة التحكم"""
-    await update.callback_query.answer("🎖️ استخدم الأمر النصي: /makeadmin ثم الأيدي الخاص بالمستخدم", show_alert=True)
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "🎖️ *تعيين مشرف جديد:*\n\nلتعيين شخص كمشرف، أرسل:\n`/makeadmin ID_المستخدم`",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data="admin_panel")]])
+    )
 
 async def make_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """أمر تعيين مشرف نصي: /makeadmin ID"""
     if not is_super_admin(update.effective_user.id):
-        await update.message.reply_text("👑 للمالك الأساسي فقط.")
+        await update.message.reply_text("👑 عذراً، هذا الأمر للمالك الأساسي فقط.")
         return
     if not context.args:
-        await update.message.reply_text("❌ أرسل المعرف: `/makeadmin 123456`", parse_mode="Markdown")
+        await update.message.reply_text("❌ أرسل المعرف هكذا: `/makeadmin 123456`")
         return
     
     try:
@@ -202,9 +213,10 @@ async def make_admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if user:
             user.is_admin = True
             session.commit()
-            await update.message.reply_text(f"✅ تم تعيين {user.full_name} كمشرف!")
+            await update.message.reply_text(f"✅ تم تعيين {user.full_name} كمشرف بنجاح!")
+            await log_event(context, f"🎖️ تعيين مشرف جديد: {target_id}")
         else:
-            await update.message.reply_text("المستخدم غير مسجل في البوت.")
+            await update.message.reply_text("❌ المستخدم لم يسبق له الدخول للبوت.")
         session.close()
-    except:
-        await update.message.reply_text("خطأ في البيانات.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطأ: {e}")
