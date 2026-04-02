@@ -34,12 +34,13 @@ def main():
     # 2. إنشاء التطبيق باستخدام التوكن
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     
-    # --- 3. نظام المحادثات للأدمن (Broadcast & Force Sub) ---
-    # per_message=True تضمن أن البوت يفرق بين رسائل المستخدمين المختلفة في نفس الوقت
+    # --- 3. نظام المحادثات للأدمن والمستخدم (Broadcast & Force Sub & Link Channel) ---
+    # أضفنا "WAITING_CHANNEL" لنظام المحادثة لربط القنوات
     admin_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(admin_handlers.start_broadcast, pattern="^admin_broadcast$"),
-            CallbackQueryHandler(admin_handlers.start_set_sub, pattern="^admin_set_sub$")
+            CallbackQueryHandler(admin_handlers.start_set_sub, pattern="^admin_set_sub$"),
+            CallbackQueryHandler(base_handlers.start_link_channel, pattern="^link_channel$") # إضافة
         ],
         states={
             admin_handlers.BROADCAST_MESSAGE: [
@@ -47,6 +48,9 @@ def main():
             ],
             admin_handlers.SET_FORCE_SUB: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_handlers.save_force_sub)
+            ],
+            "WAITING_CHANNEL": [ # حالة انتظار يوزر القناة من المستخدم
+                MessageHandler(filters.TEXT & ~filters.COMMAND, base_handlers.save_channel_link)
             ]
         },
         fallbacks=[CommandHandler("start", base_handlers.start)],
@@ -63,8 +67,10 @@ def main():
     application.add_handler(CommandHandler("ban", admin_handlers.ban_user_command))
     application.add_handler(CommandHandler("help", base_handlers.help_command))
     
-    # أمر إضافة الاختبار المطور بالفاصلة المنقوطة (;)
+    # أوامر إضافية للميزات الجديدة
     application.add_handler(CommandHandler("add_quiz", base_handlers.add_quiz_command))
+    application.add_handler(CommandHandler("add_bulk", base_handlers.add_bulk_quizzes)) # إضافة: الدفعة الواحدة
+    application.add_handler(CommandHandler("post_now", base_handlers.post_now)) # إضافة: النشر الفوري
     
     # --- 5. معالجات الأزرار (Callback Handlers) ---
     # أزرار المستخدم الأساسية
@@ -73,11 +79,16 @@ def main():
     application.add_handler(CallbackQueryHandler(base_handlers.leaderboard, pattern="^leaderboard$"))
     application.add_handler(CallbackQueryHandler(base_handlers.list_my_quizzes, pattern="^my_quizzes$"))
     application.add_handler(CallbackQueryHandler(base_handlers.help_command, pattern="^help$"))
+    application.add_handler(CallbackQueryHandler(base_handlers.settings, pattern="^settings$")) # إضافة: تفعيل زر الإعدادات
+    
+    # معالج التحكم في الاختبارات (عرض/حذف)
+    application.add_handler(CallbackQueryHandler(base_handlers.quiz_control, pattern="^quiz_")) # إضافة
     
     # أزرار لوحة تحكم الأدمن
     application.add_handler(CallbackQueryHandler(admin_handlers.admin_panel, pattern="^admin_panel$"))
     application.add_handler(CallbackQueryHandler(admin_handlers.admin_stats, pattern="^admin_stats$"))
-    application.add_handler(CallbackQueryHandler(admin_handlers.ban_user_command, pattern="^admin_ban_user$"))
+    application.add_handler(CallbackQueryHandler(admin_handlers.admin_ban_user, pattern="^admin_ban_user$")) # تعديل للنمط
+    application.add_handler(CallbackQueryHandler(admin_handlers.admin_make_admin, pattern="^admin_make_admin$")) # إضافة
 
     # --- 6. تشغيل البوت ---
     print("🚀 البوت انطلق الآن بنجاح وهو قيد التشغيل...")
