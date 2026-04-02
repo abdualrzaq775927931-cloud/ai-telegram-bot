@@ -36,11 +36,11 @@ def main():
     
     # --- 3. نظام المحادثات للأدمن والمستخدم (Broadcast & Force Sub & Link Channel) ---
     # أضفنا "WAITING_CHANNEL" لنظام المحادثة لربط القنوات
-    admin_conv = ConversationHandler(
+        admin_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(admin_handlers.start_broadcast, pattern="^admin_broadcast$"),
             CallbackQueryHandler(admin_handlers.start_set_sub, pattern="^admin_set_sub$"),
-            CallbackQueryHandler(base_handlers.start_link_channel, pattern="^link_channel$") # إضافة
+            CallbackQueryHandler(base_handlers.start_link_channel, pattern="^link_channel$")
         ],
         states={
             admin_handlers.BROADCAST_MESSAGE: [
@@ -49,14 +49,17 @@ def main():
             admin_handlers.SET_FORCE_SUB: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_handlers.save_force_sub)
             ],
-            "WAITING_CHANNEL": [ # حالة انتظار يوزر القناة من المستخدم
+            "WAITING_CHANNEL": [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, base_handlers.save_channel_link)
             ]
         },
-        fallbacks=[CommandHandler("start", base_handlers.start)],
+        # التعديل هنا: استبدلنا CommandHandler بـ CallbackQueryHandler 
+        # ليتوافق مع per_message=True ويختفي التحذير
+        fallbacks=[CallbackQueryHandler(base_handlers.start, pattern="^start$")],
         per_message=True 
     )
     application.add_handler(admin_conv)
+
     
     # --- 4. أوامر المستخدم والأدمن (Commands) ---
     application.add_handler(CommandHandler("start", base_handlers.start))
