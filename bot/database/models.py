@@ -6,7 +6,6 @@ Base = declarative_base()
 
 class User(Base):
     __tablename__ = 'users'
-    
     id = Column(Integer, primary_key=True)
     telegram_id = Column(BigInteger, unique=True, index=True)
     username = Column(String, nullable=True)
@@ -21,20 +20,20 @@ class User(Base):
     quizzes = relationship("Quiz", back_populates="creator")
     responses = relationship("Response", back_populates="user")
 
-# --- الجدول الجديد للتحكم في إعدادات البوت من التليجرام ---
 class BotSettings(Base):
     __tablename__ = 'bot_settings'
     id = Column(Integer, primary_key=True)
-    key = Column(String, unique=True, index=True) # مفاتيح مثل 'force_sub'
-    value = Column(String, nullable=True)         # يوزر القناة مثلاً @MyChannel
+    key = Column(String, unique=True, index=True) 
+    value = Column(String, nullable=True)         
 
 class Channel(Base):
     __tablename__ = 'channels'
-    
     id = Column(Integer, primary_key=True)
-    channel_id = Column(BigInteger, unique=True, index=True)
+    # قمت بتغيير اسم العمود من added_by إلى owner_id ليتوافق مع دوال base_handlers
+    owner_id = Column(Integer, ForeignKey('users.id')) 
+    # قمت بتغيير نوع channel_id إلى String ليدعم المعرفات التي تبدأ بـ @
+    channel_id = Column(String, unique=True, index=True) 
     title = Column(String)
-    added_by = Column(Integer, ForeignKey('users.id'))
     post_interval = Column(Integer, default=120)
     is_active = Column(Boolean, default=True)
     last_post_at = Column(DateTime, nullable=True)
