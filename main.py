@@ -36,7 +36,7 @@ def main():
     
     # --- 3. نظام المحادثات للأدمن والمستخدم (Broadcast & Force Sub & Link Channel) ---
     # أضفنا "WAITING_CHANNEL" لنظام المحادثة لربط القنوات
-            admin_conv = ConversationHandler(
+    admin_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(admin_handlers.start_broadcast, pattern="^admin_broadcast$"),
             CallbackQueryHandler(admin_handlers.start_set_sub, pattern="^admin_set_sub$"),
