@@ -36,28 +36,22 @@ def main():
     
     # --- 3. نظام المحادثات للأدمن والمستخدم (Broadcast & Force Sub & Link Channel) ---
     # أضفنا "WAITING_CHANNEL" لنظام المحادثة لربط القنوات
-        admin_conv = ConversationHandler(
+            admin_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(admin_handlers.start_broadcast, pattern="^admin_broadcast$"),
             CallbackQueryHandler(admin_handlers.start_set_sub, pattern="^admin_set_sub$"),
             CallbackQueryHandler(base_handlers.start_link_channel, pattern="^link_channel$")
         ],
         states={
-            admin_handlers.BROADCAST_MESSAGE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_handlers.perform_broadcast)
-            ],
-            admin_handlers.SET_FORCE_SUB: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, admin_handlers.save_force_sub)
-            ],
-            "WAITING_CHANNEL": [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, base_handlers.save_channel_link)
-            ]
+            # تأكد أن هذه المتغيرات مستوردة من ملفاتها
+            admin_handlers.BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_handlers.perform_broadcast)],
+            admin_handlers.SET_FORCE_SUB: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_handlers.save_force_sub)],
+            "WAITING_CHANNEL": [MessageHandler(filters.TEXT & ~filters.COMMAND, base_handlers.save_channel_link)]
         },
-        # التعديل هنا: استبدلنا CommandHandler بـ CallbackQueryHandler 
-        # ليتوافق مع per_message=True ويختفي التحذير
         fallbacks=[CallbackQueryHandler(base_handlers.start, pattern="^start$")],
         per_message=True 
-    )
+            )
+
     application.add_handler(admin_conv)
 
     
